@@ -1,0 +1,23 @@
+ACT_ARRIVE = 'arrive'
+ACT_BREAK = 'break'
+ACT_RESUME = 'resume'
+ACT_LEAVE = 'leave'
+ACT_SICK = 'sick'
+ACT_VACTATION = 'vac'
+ACT_FZA = 'fza'
+
+
+
+MSG_ERR_NOT_WORKING = 1 << 0
+MSG_ERR_HAVE_NOT_LEFT = 1 << 1
+MSG_ERR_NOT_BREAKING = 1 << 2
+MSG_SUCCESS_ARRIVAL = 1 << 3
+MSG_SUCCESS_BREAK = 1 << 4
+MSG_SUCCESS_RESUME = 1 << 5
+MSG_SUCCESS_LEAVE = 1 << 6
+
+
+WEEK_HOURS = 35
+
+CONFIG_FILE = "~/.config/timetrack.conf"
+
