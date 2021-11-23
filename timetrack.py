@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3
 # vim:ts=4:sts=4:sw=4:tw=80:et
 
 from datetime import datetime, date, time, timedelta
@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 import random
+import configparser
 
 ACT_ARRIVE = 'arrive'
 ACT_BREAK = 'break'
@@ -26,6 +27,9 @@ MSG_SUCCESS_LEAVE = 1 << 6
 
 WEEK_HOURS = 40
 
+CONFIG_FILE = "~/.config/timetrack.conf"
+
+cfg = configparser.ConfigParser()
 
 class ProgramAbortError(Exception):
     """
@@ -294,7 +298,7 @@ def dbSetup():
     Create a new SQLite database in the user's home, creating and initializing
     the database if it doesn't exist. Returns an sqlite3 connection object.
     """
-    con = sqlite3.connect(os.path.expanduser("~/.timetrack.db"),
+    con = sqlite3.connect(os.path.expanduser(cfg['db']['file']),
                           detect_types=sqlite3.PARSE_DECLTYPES)
     con.row_factory = sqlite3.Row
 
@@ -548,62 +552,80 @@ def weekStatistics(con, offset=0):
             message("      Daily:   {:>2d} h {:>02d} min"
                     .format(remainingPerDayHours, remainingPerDayMinutes))
 
-parser = argparse.ArgumentParser(description='Track your work time')
+def validateConfig(config):
+    config['db']['file'] = os.path.expanduser(config['db']['file'])
+    if not (os.path.exists(config['db']['file']) or os.access(os.path.dirname(config['db']['file']), os.W_OK)):
+        error("invalid db file or path not writeable", None)
 
-commands = parser.add_subparsers(title='subcommands', dest='action',
-                                 help='description', metavar='action')
-parser_morning = commands.add_parser('morning',
-                                     help='Start a new day')
-parser_break = commands.add_parser('break',
-                                   help='Take a break from working')
-parser_resume = commands.add_parser('resume',
-                                    help='Resume working')
-parser_continue = commands.add_parser('continue',
-                                      help='Resume working, alias of "resume"')
-parser_closing = commands.add_parser('closing',
-                                     help='End your work day')
-parser_day = commands.add_parser('day',
-                                 help='Print daily statistics')
-parser_day.add_argument('offset', nargs='?', default=0, type=int,
-                        help='Offset in days to the current one to analyze. '
-                             'Note only negative values make sense here.')
-parser_week = commands.add_parser('week',
-                                  help='Print weekly statistics')
-parser_week.add_argument('offset', nargs='?', default=0, type=int,
-                         help='Offset in weeks to the current one to analyze. '
-                              'Note only negative values make sense here.')
+def main():
+    try:
+        cfgfile = os.path.expanduser(CONFIG_FILE)
+        cfg.read(cfgfile)
+    except:
+        print("Please create a " + CONFIG_FILE + " with entry: \n[db]\nfile = /path/to/database.db")
+        sys.exit(1)
 
-args = parser.parse_args()
+    validateConfig(cfg)
 
-actions = {
-    'morning':  (startTracking, []),
-    'break':    (suspendTracking, []),
-    'resume':   (resumeTracking, []),
-    'continue': (resumeTracking, []),
-    'day':      (dayStatistics, ['offset']),
-    'week':     (weekStatistics, ['offset']),
-    'closing':  (endTracking, [])
-}
+    parser = argparse.ArgumentParser(description='Track your work time')
 
-if args.action not in actions:
-    message('Unsupported action "{}". Use --help to get usage information.'
-            .format(args.action), file=sys.stderr)
-    sys.exit(1)
+    commands = parser.add_subparsers(title='subcommands', dest='action',
+                                    help='description', metavar='action')
+    parser_morning = commands.add_parser('morning',
+                                        help='Start a new day')
+    parser_break = commands.add_parser('break',
+                                    help='Take a break from working')
+    parser_resume = commands.add_parser('resume',
+                                        help='Resume working')
+    parser_continue = commands.add_parser('continue',
+                                        help='Resume working, alias of "resume"')
+    parser_closing = commands.add_parser('closing',
+                                        help='End your work day')
+    parser_day = commands.add_parser('day',
+                                    help='Print daily statistics')
+    parser_day.add_argument('offset', nargs='?', default=0, type=int,
+                            help='Offset in days to the current one to analyze. '
+                                'Note only negative values make sense here.')
+    parser_week = commands.add_parser('week',
+                                    help='Print weekly statistics')
+    parser_week.add_argument('offset', nargs='?', default=0, type=int,
+                            help='Offset in weeks to the current one to analyze. '
+                                'Note only negative values make sense here.')
 
-try:
-    connection = dbSetup()
+    args = parser.parse_args()
 
-    extraArgs = {}
-    handler, extraArgNames = actions[args.action]
-    for extraArgName in extraArgNames:
-        if extraArgName in args:
-            extraArgs[extraArgName] = getattr(args, extraArgName)
+    actions = {
+        'morning':  (startTracking, []),
+        'break':    (suspendTracking, []),
+        'resume':   (resumeTracking, []),
+        'continue': (resumeTracking, []),
+        'day':      (dayStatistics, ['offset']),
+        'week':     (weekStatistics, ['offset']),
+        'closing':  (endTracking, [])
+    }
 
-    handler(connection, **extraArgs)
-    sys.exit(0)
-except ProgramAbortError as e:
-    print(str(e), file=sys.stderr)
-    sys.exit(1)
-except KeyboardInterrupt as e:
-    print()
-    sys.exit(255)
+    if args.action not in actions:
+        message('Unsupported action "{}". Use --help to get usage information.'
+                .format(args.action), file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        connection = dbSetup()
+
+        extraArgs = {}
+        handler, extraArgNames = actions[args.action]
+        for extraArgName in extraArgNames:
+            if extraArgName in args:
+                extraArgs[extraArgName] = getattr(args, extraArgName)
+
+        handler(connection, **extraArgs)
+        sys.exit(0)
+    except ProgramAbortError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt as e:
+        print()
+        sys.exit(255)
+
+if __name__ == "__main__":
+    main()
