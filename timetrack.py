@@ -2,17 +2,27 @@
 # vim:ts=4:sts=4:sw=4:tw=80:et
 
 from datetime import datetime, date, time, timedelta
+from dateutil.relativedelta import *
 
 import argparse
 import os
 import sqlite3
 import sys
 import configparser
+from enum import Enum, auto
+
+from workalendar.europe.germany import Berlin
+import calendar
+
+holiday_calendar = Berlin()
+
 
 from defines import *
 from randommessage import *
 
 cfg = configparser.ConfigParser()
+
+THE_START = date(2021, 7, 12)
 
 class ProgramAbortError(Exception):
     """
@@ -77,7 +87,7 @@ def dbSetup():
                     , PRIMARY KEY (type, ts)
                 )
             """.format(ACT_ARRIVE, ACT_BREAK, ACT_RESUME, ACT_LEAVE, ACT_SICK,
-                ACT_VACTATION, ACT_FZA))
+                ACT_VACATION, ACT_FZA))
         con.execute("PRAGMA user_version = 1")
         con.commit()
     # database upgrade code would go here
@@ -170,7 +180,6 @@ def endTracking(con):
     addEntry(con, ACT_LEAVE, leaveTime)
     message(randomMessage(MSG_SUCCESS_LEAVE, leaveTime))
 
-
 def getEntries(con, d):
     # Get the arrival for the date
     cur = con.execute("SELECT ts FROM times WHERE type = ? AND ts >= ? AND ts "
@@ -179,23 +188,114 @@ def getEntries(con, d):
                        datetime.combine(d + timedelta(days=1), time())))
     res = cur.fetchone()
     if not res:
-        error("There is no arrival on {:%d.%m.%Y}".format(d), None)
+        # without arrival we expect vacation/sick
+        cur = con.execute("SELECT type, ts FROM times WHERE (type = ? OR type = "
+                        "?) AND ts >= ? AND ts < ? ORDER BY ts ASC LIMIT 1",
+                      (ACT_SICK, ACT_VACATION, datetime.combine(d, time()),
+                       datetime.combine(d + timedelta(days=1), time())))
+        res = cur.fetchone()
+        if not res:
+            # nothing on this day
+            return []
+        return [(res['type'], res['ts'])]
+
+    # normal day here
     startTime = res['ts']
 
     # Use the end of the day as endtime
     endTime = datetime.combine(d + timedelta(days=1), time())
 
     # Get all entries between the start time, and the end time (if applicable)
-    cur = con.execute("SELECT type, ts FROM times WHERE ts >= ? AND ts <= "
+    cur = con.execute("SELECT type, ts FROM times WHERE ts >= ? AND ts < "
                       "? ORDER BY ts ASC", (startTime, endTime))
     return cur
 
 
+class WorkDay:
+    class Type(Enum):
+        Normal = auto()
+        Sick = auto()
+        Vacation = auto()
+
+    class Pause:
+        def __init__(self):
+            self.start = None
+            self.end = None
+
+        def duration(self):
+            return self.end - self.start
+
+        def valid(self):
+            return self.start and self.end
+
+    def __init__(self):
+        self.start = None
+        self.end = None
+        self.pauses = []
+        self.type = WorkDay.Type.Normal
+
+    def worktime(self):
+        if not self.start or not self.end:
+            return timedelta(seconds=0)
+
+        pausetime = timedelta(seconds=0)
+        for p in self.pauses:
+            pausetime += p.duration()
+
+        return self.end - self.start - pausetime
+
 def getWorkTimeForDay(con, d=date.today()):
+    summaryTime = timedelta(0)
+    arrival = None
+    day = WorkDay()
+    pause = None
+    for type, ts in getEntries(con, d):
+        if type in [ACT_SICK, ACT_VACATION]:
+            if type == ACT_SICK:
+                day.type = WorkDay.Type.Sick
+            elif type == ACT_VACATION:
+                day.type = WorkDay.Type.Vacation
+
+            # random start point
+            day.start = datetime.combine(ts.date(), time(hour=8, minute=0, second=0))
+            day.end = day.start + timedelta(hours=WEEK_HOURS / 5.0)
+
+            return day
+        elif type == ACT_ARRIVE:
+            day.start = ts
+        elif type == ACT_LEAVE:
+            day.end = ts
+        elif type == ACT_BREAK:
+            if pause:
+                error("Break while pause active at {}".format(ts), None)
+
+            pause = WorkDay.Pause()
+            pause.start = ts
+        elif type == ACT_RESUME:
+            if not pause:
+                error("Resume while no pause active at {}".format(ts), None)
+
+            pause.end = ts
+            day.pauses.append(pause)
+            pause = None
+        else:
+            error("Unhandled type for {}".format(type, ts), None)
+
+
+    if day.start and not day.end:
+        day.end = datetime.now()
+
+    return day
+
+
+def getWorkTimeForDay_old(con, d=date.today()):
     summaryTime = timedelta(0)
     arrival = None
     for type, ts in getEntries(con, d):
         if not arrival:
+            if type in [ACT_SICK, ACT_VACATION]:
+                return (False, summaryTime + timedelta(hours=WEEK_HOURS / 5.0))
+
             if type not in [ACT_ARRIVE, ACT_RESUME]:
                 error("Expected arrival while computing presence time, got {}"
                       " at {}".format(type, ts), None)
@@ -222,13 +322,54 @@ def dayStatistics(con, offset=0):
             headerPrinted = True
         message("  {:<10} {:%d.%m.%Y %H:%M}".format(type, ts))
 
-    currentlyHere, totalTime = getWorkTimeForDay(con)
+    currentlyHere, totalTime = getWorkTimeForDay_old(con)
     if currentlyHere:
         message("You are currently at work.")
     message("You have worked {} h {} min".format(
         int(totalTime.total_seconds() // (60 * 60)),
         int((totalTime.total_seconds() % 3600) // 60)))
 
+def monthStats(con, offset=0):
+    today = date.today() - relativedelta(months=offset)
+    firstDay = holiday_calendar.find_following_working_day(date(today.year, today.month, 1))
+    lastDay = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+
+    if (firstDay < THE_START):
+        firstDay = THE_START
+
+    while not holiday_calendar.is_working_day(firstDay):
+        firstDay += timedelta(days=1)
+
+    while not holiday_calendar.is_working_day(lastDay):
+        lastDay -= timedelta(days=1)
+
+    print(firstDay)
+    print(lastDay)
+
+    workingDays = holiday_calendar.get_working_days_delta(firstDay, lastDay)
+    dailyHours = timedelta(hours=WEEK_HOURS / 5.0)
+    expectedWorkingHours = dailyHours * workingDays
+
+    workedHours = timedelta(seconds=0)
+
+    curDay = firstDay
+    while curDay <= lastDay:
+        if holiday_calendar.is_working_day(curDay):
+            workday = getWorkTimeForDay(con, curDay)
+            workedHours += workday.worktime()
+            comment = ""
+            if workday.type == WorkDay.Type.Sick:
+                comment = "(Krank)"
+            elif workday.type == WorkDay.Type.Vacation:
+                comment = "(Urlaub)"
+            print("{} {} {}".format(curDay, workday.worktime(),
+                    comment))
+
+        curDay += timedelta(days=1)
+
+    print("Working hours expected for {}: {}".format(today.strftime("%B %y"),
+        expectedWorkingHours))
+    print("Actual hours {}".format(workedHours))
 
 def weekStatistics(con, offset=0):
     today = date.today()
@@ -250,7 +391,7 @@ def weekStatistics(con, offset=0):
 
     while current < endOfWeek:
         try:
-            currentlyHere, timeForDay = getWorkTimeForDay(con, current)
+            currentlyHere, timeForDay = getWorkTimeForDay_old(con, current)
             daysSoFar += 1
             totalHours = int(timeForDay.total_seconds() // (60 * 60))
             totalMinutes = int((timeForDay.total_seconds() % 3600) // 60)
@@ -374,6 +515,10 @@ def main():
     parser_week.add_argument('offset', nargs='?', default=0, type=int,
                             help='Offset in weeks to the current one to analyze. '
                                 'Note only negative values make sense here.')
+    parser_month = commands.add_parser('month',
+                                    help='Print monthly statistics')
+    parser_month.add_argument('offset', nargs='?', default=0, type=int,
+                            help='Offset in months to the current one.')
 
     args = parser.parse_args()
 
@@ -384,6 +529,7 @@ def main():
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
+        'month':     (monthStats, ['offset']),
         'closing':  (endTracking, [])
     }
 

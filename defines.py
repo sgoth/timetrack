@@ -3,7 +3,7 @@ ACT_BREAK = 'break'
 ACT_RESUME = 'resume'
 ACT_LEAVE = 'leave'
 ACT_SICK = 'sick'
-ACT_VACTATION = 'vac'
+ACT_VACATION = 'vac'
 ACT_FZA = 'fza'
 
 
