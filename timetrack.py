@@ -497,14 +497,20 @@ def main():
                                     help='description', metavar='action')
     parser_morning = commands.add_parser('morning',
                                         help='Start a new day')
+    commands.add_parser('start', help='Start a new day')
+
     parser_break = commands.add_parser('break',
                                     help='Take a break from working')
+    commands.add_parser('pause', help='Alias to break')
+
     parser_resume = commands.add_parser('resume',
                                         help='Resume working')
     parser_continue = commands.add_parser('continue',
                                         help='Resume working, alias of "resume"')
     parser_closing = commands.add_parser('closing',
                                         help='End your work day')
+    commands.add_parser('end', help='End your work day')
+    commands.add_parser('stop', help='End your work day')
     parser_day = commands.add_parser('day',
                                     help='Print daily statistics')
     parser_day.add_argument('offset', nargs='?', default=0, type=int,
@@ -525,13 +531,20 @@ def main():
     actions = {
         'morning':  (startTracking, []),
         'break':    (suspendTracking, []),
+        'pause':    (suspendTracking, []),
         'resume':   (resumeTracking, []),
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
         'month':     (monthStats, ['offset']),
-        'closing':  (endTracking, [])
+        'closing':  (endTracking, []),
+        'stop':  (endTracking, []),
+        'end':  (endTracking, [])
     }
+
+    if not args.action:
+        parser.print_help()
+        sys.exit(1)
 
     if args.action not in actions:
         message('Unsupported action "{}". Use --help to get usage information.'
