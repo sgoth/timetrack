@@ -346,7 +346,8 @@ def monthStats(con, offset=0):
     print(firstDay)
     print(lastDay)
 
-    workingDays = holiday_calendar.get_working_days_delta(firstDay, lastDay)
+    workingDays = holiday_calendar.get_working_days_delta(firstDay, lastDay,
+            include_start=True)
     dailyHours = timedelta(hours=WEEK_HOURS / 5.0)
     expectedWorkingHours = dailyHours * workingDays
 
