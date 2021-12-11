@@ -18,6 +18,7 @@ MSG_SUCCESS_LEAVE = 1 << 6
 
 
 WEEK_HOURS = 35
+DAY_HOURS = WEEK_HOURS / 5.0
 
 CONFIG_FILE = "~/.config/timetrack.conf"
 

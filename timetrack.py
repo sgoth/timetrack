@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import configparser
 from enum import Enum, auto
+from functools import reduce
 
 from workalendar.europe.germany import Berlin
 import calendar
@@ -210,6 +211,12 @@ def getEntries(con, d):
                       "? ORDER BY ts ASC", (startTime, endTime))
     return cur
 
+def timeAsHourMinute(time):
+    return  (
+                int(time.total_seconds() // (60 * 60)),
+                int((time.total_seconds() % 3600) // 60)
+            )
+
 
 class WorkDay:
     class Type(Enum):
@@ -234,6 +241,9 @@ class WorkDay:
         self.pauses = []
         self.type = WorkDay.Type.Normal
 
+    def day(self):
+        return date(self.start.year, self.start.month, self.start.day)
+
     def worktime(self):
         if not self.start or not self.end:
             return timedelta(seconds=0)
@@ -243,6 +253,31 @@ class WorkDay:
             pausetime += p.duration()
 
         return self.end - self.start - pausetime
+
+class WorkMonth:
+    def __init__(self, date):
+        self.date = date
+        self.expectedTime = None
+        self.actualTime = None
+        self.expectedWorkdays = None
+        self.workdays = []
+
+    def __str__(self):
+        dH, dM = timeAsHourMinute(self.delta())
+        return "{}-{} ({} days):\t{}{} h {} min".format(self.date.year,
+                self.date.month, len(self.workdays), "+" if
+                self.delta().total_seconds() > 0
+                else "", dH, dM)
+
+    def delta(self):
+        return self.actualTime - self.expectedTime
+
+    def deltaString(self):
+        dH, dM = timeAsHourMinute(self.delta())
+        return "{} h {} min".format(dH, dM)
+
+    def addDay(self, day):
+        self.workdays.append(day)
 
 def getWorkTimeForDay(con, d=date.today()):
     summaryTime = timedelta(0)
@@ -258,7 +293,7 @@ def getWorkTimeForDay(con, d=date.today()):
 
             # random start point
             day.start = datetime.combine(ts.date(), time(hour=8, minute=0, second=0))
-            day.end = day.start + timedelta(hours=WEEK_HOURS / 5.0)
+            day.end = day.start + timedelta(hours=DAY_HOURS)
 
             return day
         elif type == ACT_ARRIVE:
@@ -294,7 +329,7 @@ def getWorkTimeForDay_old(con, d=date.today()):
     for type, ts in getEntries(con, d):
         if not arrival:
             if type in [ACT_SICK, ACT_VACATION]:
-                return (False, summaryTime + timedelta(hours=WEEK_HOURS / 5.0))
+                return (False, summaryTime + timedelta(hours=DAY_HOURS))
 
             if type not in [ACT_ARRIVE, ACT_RESUME]:
                 error("Expected arrival while computing presence time, got {}"
@@ -329,13 +364,22 @@ def dayStatistics(con, offset=0):
         int(totalTime.total_seconds() // (60 * 60)),
         int((totalTime.total_seconds() % 3600) // 60)))
 
-def monthStats(con, offset=0):
-    today = date.today() - relativedelta(months=offset)
-    firstDay = holiday_calendar.find_following_working_day(date(today.year, today.month, 1))
-    lastDay = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+def monthStats(con, month=0):
+    today = date.today()
+    # FIXME this needs to support other years too - make month input a date
+    m = WorkMonth(date(today.year, today.month if month == 0 else month, 1))
+
+    if (date(m.date.year, m.date.month, 1) < date(THE_START.year,
+        THE_START.month, 1)):
+        error("Month {} before {}".format(m.date, THE_START), None)
+
+    firstDay = holiday_calendar.find_following_working_day(date(m.date.year, m.date.month, 1))
+    lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
 
     if (firstDay < THE_START):
         firstDay = THE_START
+    if lastDay > today:
+        lastDay = lastDay.replace(day=today.day)
 
     while not holiday_calendar.is_working_day(firstDay):
         firstDay += timedelta(days=1)
@@ -343,13 +387,12 @@ def monthStats(con, offset=0):
     while not holiday_calendar.is_working_day(lastDay):
         lastDay -= timedelta(days=1)
 
-    print(firstDay)
-    print(lastDay)
-
     workingDays = holiday_calendar.get_working_days_delta(firstDay, lastDay,
             include_start=True)
-    dailyHours = timedelta(hours=WEEK_HOURS / 5.0)
-    expectedWorkingHours = dailyHours * workingDays
+    dailyHours = timedelta(hours=DAY_HOURS)
+
+    m.expectedTime = dailyHours * workingDays
+    m.expectedWorkdays = workingDays
 
     workedHours = timedelta(seconds=0)
 
@@ -358,19 +401,63 @@ def monthStats(con, offset=0):
         if holiday_calendar.is_working_day(curDay):
             workday = getWorkTimeForDay(con, curDay)
             workedHours += workday.worktime()
-            comment = ""
-            if workday.type == WorkDay.Type.Sick:
-                comment = "(Krank)"
-            elif workday.type == WorkDay.Type.Vacation:
-                comment = "(Urlaub)"
-            print("{} {} {}".format(curDay, workday.worktime(),
-                    comment))
+            m.addDay(workday)
 
         curDay += timedelta(days=1)
 
-    print("Working hours expected for {}: {}".format(today.strftime("%B %y"),
-        expectedWorkingHours))
-    print("Actual hours {}".format(workedHours))
+    m.actualTime = workedHours
+
+    return m
+
+def printMonthStats(con, month=0):
+    m = monthStats(con, month)
+
+    for workday in m.workdays:
+        comment = ""
+        if workday.type == WorkDay.Type.Sick:
+            comment = "(Krank)"
+        elif workday.type == WorkDay.Type.Vacation:
+            comment = "(Urlaub)"
+        print("{} {} {}".format(workday.day(), workday.worktime(),
+                comment))
+
+
+    expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
+    actualHours, actualMinutes = timeAsHourMinute(m.actualTime)
+    print("Working hours expected for {}: {} h {} min".format(m.date.strftime("%B %y"),
+        expectedHours, expectedMinutes))
+    print("Actual hours {} h {} min".format(actualHours, actualMinutes))
+    print("Delta hours {}".format(m.deltaString()))
+
+    print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
+
+def yearlyStats(con, year=0):
+    y = date.today()
+    if year != 0:
+        y = y.replace(year=year)
+
+    firstMonth = THE_START.month if (y.year <= THE_START.year) else 1
+    months = []
+
+    for month in range(firstMonth, y.month + 1):
+        m = monthStats(con, month)
+        months.append(m)
+        print("{}".format(m))
+
+    totalExpected = reduce(lambda x,y: x + y.expectedTime, months,
+            timedelta(seconds=0))
+    totalActual = reduce(lambda x,y: x + y.actualTime, months,
+            timedelta(seconds=0))
+
+    totalDiff = totalActual - totalExpected
+
+    print("total expected: {}".format(totalExpected))
+    print("total actual: {}".format(totalActual))
+
+    tdH, tdM = timeAsHourMinute(totalDiff)
+    tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
+    print("total diff: {} h {} min (workdays: {})".format(tdH, tdM, tdD))
+
 
 def weekStatistics(con, offset=0):
     today = date.today()
@@ -382,7 +469,7 @@ def weekStatistics(con, offset=0):
         startOfWeek.isocalendar()[1]))
 
     current = startOfWeek
-    dailyHours = timedelta(hours=float(WEEK_HOURS) / 5.0)
+    dailyHours = timedelta(hours=DAY_HOURS)
     weekTotal = timedelta(seconds=0)
     extraHours = timedelta(seconds=0)
     daysSoFar = 0
@@ -524,20 +611,27 @@ def main():
                                 'Note only negative values make sense here.')
     parser_month = commands.add_parser('month',
                                     help='Print monthly statistics')
-    parser_month.add_argument('offset', nargs='?', default=0, type=int,
-                            help='Offset in months to the current one.')
+    parser_month.add_argument('month', nargs='?', default=0, type=int,
+                            help='Month (1-12) or 0 for current')
+    parser_year = commands.add_parser('year',
+                                    help='Print yearly statistics')
+    parser_year.add_argument('year', nargs='?', default=0, type=int,
+                            help='Year (YYYY) or 0 for current')
+
 
     args = parser.parse_args()
 
     actions = {
         'morning':  (startTracking, []),
+        'start':    (startTracking, []),
         'break':    (suspendTracking, []),
         'pause':    (suspendTracking, []),
         'resume':   (resumeTracking, []),
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
-        'month':     (monthStats, ['offset']),
+        'month':     (printMonthStats, ['month']),
+        'year':     (yearlyStats, ['year']),
         'closing':  (endTracking, []),
         'stop':  (endTracking, []),
         'end':  (endTracking, [])
