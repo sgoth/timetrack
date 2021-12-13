@@ -254,6 +254,10 @@ class WorkDay:
 
         return self.end - self.start - pausetime
 
+    def __str__(self):
+        h, m = timeAsHourMinute(self.worktime())
+        return "{} {:2d}:{:2d}".format(self.day(), h, m)
+
 class WorkMonth:
     def __init__(self, date):
         self.date = date
@@ -264,17 +268,18 @@ class WorkMonth:
 
     def __str__(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{}-{} ({} days):\t{}{} h {} min".format(self.date.year,
-                self.date.month, len(self.workdays), "+" if
-                self.delta().total_seconds() > 0
-                else "", dH, dM)
+        return "{} ({} days):\t{}{:3d} h {:2d} min".format(
+                self.date.strftime("%Y-%m"),
+                len(self.workdays),
+                "+" if self.delta().total_seconds() > 0 else "-",
+                abs(dH), dM)
 
     def delta(self):
         return self.actualTime - self.expectedTime
 
     def deltaString(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{} h {} min".format(dH, dM)
+        return "{:2d} h {:2d} min".format(dH, dM)
 
     def addDay(self, day):
         self.workdays.append(day)
@@ -418,8 +423,7 @@ def printMonthStats(con, month=0):
             comment = "(Krank)"
         elif workday.type == WorkDay.Type.Vacation:
             comment = "(Urlaub)"
-        print("{} {} {}".format(workday.day(), workday.worktime(),
-                comment))
+        print("{} {}".format(workday, comment))
 
 
     expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
@@ -429,7 +433,7 @@ def printMonthStats(con, month=0):
     print("Actual hours {} h {} min".format(actualHours, actualMinutes))
     print("Delta hours {}".format(m.deltaString()))
 
-    print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
+    #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
 
 def yearlyStats(con, year=0):
     y = date.today()
