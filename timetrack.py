@@ -256,7 +256,7 @@ class WorkDay:
 
     def __str__(self):
         h, m = timeAsHourMinute(self.worktime())
-        return "{} {:2d}:{:02d}".format(self.day(), h, m)
+        return "{} {:2d}:{:02d}".format(self.day().strftime('%a %Y-%m-%d'), h, m)
 
 class WorkMonth:
     def __init__(self, date):
@@ -455,12 +455,15 @@ def yearlyStats(con, year=0):
 
     totalDiff = totalActual - totalExpected
 
-    print("total expected: {}".format(totalExpected))
-    print("total actual: {}".format(totalActual))
+    tEH, tEM = timeAsHourMinute(totalExpected)
+    tAH, tAM = timeAsHourMinute(totalActual)
+    print("-" * 40)
+    print("total expected:\t\t{:4d} h {:02d} min".format(tEH, tEM))
+    print("total actual:\t\t{:>4d} h {:02d} min".format(tAH, tAM))
 
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
-    print("total diff: {} h {} min (workdays: {})".format(tdH, tdM, tdD))
+    print("total diff:\t\t{:>4d} h {:02d} min (workdays: {})".format(tdH, tdM, tdD))
 
 
 def weekStatistics(con, offset=0):
