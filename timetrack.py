@@ -256,7 +256,7 @@ class WorkDay:
 
     def __str__(self):
         h, m = timeAsHourMinute(self.worktime())
-        return "{} {:2d}:{:2d}".format(self.day(), h, m)
+        return "{} {:2d}:{:02d}".format(self.day(), h, m)
 
 class WorkMonth:
     def __init__(self, date):
