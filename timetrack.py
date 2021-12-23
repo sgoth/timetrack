@@ -256,7 +256,16 @@ class WorkDay:
 
     def __str__(self):
         h, m = timeAsHourMinute(self.worktime())
-        return "{} {:2d}:{:02d}".format(self.day().strftime('%a %Y-%m-%d'), h, m)
+        pauseString = ""
+        for i in range(len(self.pauses)):
+            p = self.pauses[i]
+            pauseString += "{}-{}".format(p.start.strftime('%H:%M'),
+                    p.end.strftime('%H:%M'))
+            if i != len(self.pauses) - 1:
+                pauseString += ","
+
+        return "{}   {:2d}:{:02d}   {}".format(self.day().strftime('%a %Y-%m-%d'),
+            h, m, pauseString)
 
 class WorkMonth:
     def __init__(self, date):
@@ -417,6 +426,7 @@ def monthStats(con, month=0):
 def printMonthStats(con, month=0):
     m = monthStats(con, month)
 
+    print("     Day         Hours   Pauses / Comment")
     for workday in m.workdays:
         comment = ""
         if workday.type == WorkDay.Type.Sick:
@@ -435,7 +445,7 @@ def printMonthStats(con, month=0):
 
     #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
 
-def yearlyStats(con, year=0):
+def yearlyStats(con, year=0, today=False):
     y = date.today()
     if year != 0:
         y = y.replace(year=year)
@@ -443,7 +453,7 @@ def yearlyStats(con, year=0):
     firstMonth = THE_START.month if (y.year <= THE_START.year) else 1
     months = []
 
-    for month in range(firstMonth, y.month + 1):
+    for month in range(firstMonth, y.month + 1 if today else y.month):
         m = monthStats(con, month)
         months.append(m)
         print("{}".format(m))
@@ -463,7 +473,8 @@ def yearlyStats(con, year=0):
 
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
-    print("total diff:\t\t{:>4d} h {:02d} min (workdays: {})".format(tdH, tdM, tdD))
+    print("total diff:\t\t{}{:>3d} h {:02d} min (workdays: {})".format(
+        ("+" if totalDiff.total_seconds() > 0 else ""),  tdH, tdM, tdD))
 
 
 def weekStatistics(con, offset=0):
@@ -624,7 +635,6 @@ def main():
                                     help='Print yearly statistics')
     parser_year.add_argument('year', nargs='?', default=0, type=int,
                             help='Year (YYYY) or 0 for current')
-
 
     args = parser.parse_args()
 
