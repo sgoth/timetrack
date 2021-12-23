@@ -277,7 +277,7 @@ class WorkMonth:
 
     def __str__(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{} ({} days): {:>6}{:3d} h {:2d} min".format(
+        return "{} ({} days): {:>6}{:3d} h {:02d} min".format(
                 self.date.strftime("%Y-%m"),
                 len(self.workdays),
                 "+" if self.delta().total_seconds() > 0 else "-",
@@ -288,7 +288,8 @@ class WorkMonth:
 
     def deltaString(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{:2d} h {:2d} min".format(dH, dM)
+        return "{} {:>2d} h {:02d} min".format("+" if self.delta().total_seconds() > 0
+                else "", dH, dM)
 
     def addDay(self, day):
         self.workdays.append(day)
@@ -426,6 +427,7 @@ def monthStats(con, month=0):
 def printMonthStats(con, month=0):
     m = monthStats(con, month)
 
+    print("Work time for {}\n".format(m.date.strftime("%B %y")))
     print("     Day         Hours   Pauses / Comment")
     for workday in m.workdays:
         comment = ""
@@ -438,10 +440,12 @@ def printMonthStats(con, month=0):
 
     expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
     actualHours, actualMinutes = timeAsHourMinute(m.actualTime)
-    print("Working hours expected for {}: {:>3} h {} min".format(m.date.strftime("%B %y"),
+
+    print("-" * 40)
+    print("Working hours expected: {:>3d} h {:02d} min".format(
         expectedHours, expectedMinutes))
-    print("Actual hours: {:>29} h {} min".format(actualHours, actualMinutes))
-    print("Delta hours:  {:>38}".format(m.deltaString()))
+    print("Actual hours:           {:>3d} h {:02d} min".format(actualHours, actualMinutes))
+    print("Delta hours:           {:>13}".format(m.deltaString()))
 
     #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
 
@@ -453,6 +457,8 @@ def yearlyStats(con, year=0, today=False):
     firstMonth = THE_START.month if (y.year <= THE_START.year) else 1
     months = []
 
+    print("Work time summary for {} {:02d}-{:02d}\n".format(y.year, firstMonth, y.month - 1 if not today
+        else y.month))
     for month in range(firstMonth, y.month + 1 if today else y.month):
         m = monthStats(con, month)
         months.append(m)
