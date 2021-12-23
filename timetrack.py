@@ -277,7 +277,7 @@ class WorkMonth:
 
     def __str__(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{} ({} days):\t{}{:3d} h {:2d} min".format(
+        return "{} ({} days): {:>6}{:3d} h {:2d} min".format(
                 self.date.strftime("%Y-%m"),
                 len(self.workdays),
                 "+" if self.delta().total_seconds() > 0 else "-",
@@ -438,10 +438,10 @@ def printMonthStats(con, month=0):
 
     expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
     actualHours, actualMinutes = timeAsHourMinute(m.actualTime)
-    print("Working hours expected for {}: {} h {} min".format(m.date.strftime("%B %y"),
+    print("Working hours expected for {}: {:>3} h {} min".format(m.date.strftime("%B %y"),
         expectedHours, expectedMinutes))
-    print("Actual hours {} h {} min".format(actualHours, actualMinutes))
-    print("Delta hours {}".format(m.deltaString()))
+    print("Actual hours: {:>29} h {} min".format(actualHours, actualMinutes))
+    print("Delta hours:  {:>38}".format(m.deltaString()))
 
     #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
 
@@ -468,12 +468,12 @@ def yearlyStats(con, year=0, today=False):
     tEH, tEM = timeAsHourMinute(totalExpected)
     tAH, tAM = timeAsHourMinute(totalActual)
     print("-" * 40)
-    print("total expected:\t\t{:4d} h {:02d} min".format(tEH, tEM))
-    print("total actual:\t\t{:>4d} h {:02d} min".format(tAH, tAM))
+    print("total expected:{:>13d} h {:02d} min".format(tEH, tEM))
+    print("total actual:  {:>13d} h {:02d} min".format(tAH, tAM))
 
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
-    print("total diff:\t\t{}{:>3d} h {:02d} min (workdays: {})".format(
+    print("total diff:    {:>10}{:>3d} h {:02d} min (workdays: {})".format(
         ("+" if totalDiff.total_seconds() > 0 else ""),  tdH, tdM, tdD))
 
 
