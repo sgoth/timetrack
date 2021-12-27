@@ -235,9 +235,9 @@ class WorkDay:
         def valid(self):
             return self.start and self.end
 
-    def __init__(self):
-        self.start = None
-        self.end = None
+    def __init__(self, day):
+        self.start = datetime(day.year, day.month, day.day)
+        self.end = self.start
         self.pauses = []
         self.type = WorkDay.Type.Normal
 
@@ -297,7 +297,7 @@ class WorkMonth:
 def getWorkTimeForDay(con, d=date.today()):
     summaryTime = timedelta(0)
     arrival = None
-    day = WorkDay()
+    day = WorkDay(d)
     pause = None
     for type, ts in getEntries(con, d):
         if type in [ACT_SICK, ACT_VACATION]:
@@ -393,8 +393,9 @@ def monthStats(con, month=0):
 
     if (firstDay < THE_START):
         firstDay = THE_START
-    if lastDay > today:
-        lastDay = lastDay.replace(day=today.day)
+    # we actually want to see all days
+    #if lastDay > today:
+    #    lastDay = lastDay.replace(day=today.day)
 
     while not holiday_calendar.is_working_day(firstDay):
         firstDay += timedelta(days=1)
@@ -427,16 +428,34 @@ def monthStats(con, month=0):
 def printMonthStats(con, month=0):
     m = monthStats(con, month)
 
+    lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
+    workdayit = iter(m.workdays)
+    workday = next(workdayit)
+
     print("Work time for {}\n".format(m.date.strftime("%B %y")))
     print("     Day         Hours   Pauses / Comment")
-    for workday in m.workdays:
-        comment = ""
-        if workday.type == WorkDay.Type.Sick:
-            comment = "(Krank)"
-        elif workday.type == WorkDay.Type.Vacation:
-            comment = "(Urlaub)"
-        print("{} {}".format(workday, comment))
 
+    # loop all days to also show weekends/holidays
+    for d in range(1, lastDay.day + 1):
+        today = date(m.date.year, m.date.month, d)
+        if today.weekday() == 0 or today.weekday() == 5:
+            print("-" * 40)
+        if workday is not None and today == workday.day():
+            comment = ""
+            if workday.type == WorkDay.Type.Sick:
+                comment = "(Krank)"
+            elif workday.type == WorkDay.Type.Vacation:
+                comment = "(Urlaub)"
+            print("{} {}".format(workday, comment))
+            try:
+                workday = next(workdayit)
+            except StopIteration:
+                workday = None
+        else:
+            comment = ""
+            if holiday_calendar.is_holiday(today):
+                comment = holiday_calendar.get_holiday_label(today)
+            print("{}    {:<}".format(today.strftime('%a %Y-%m-%d'), comment))
 
     expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
     actualHours, actualMinutes = timeAsHourMinute(m.actualTime)
