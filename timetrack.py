@@ -460,7 +460,7 @@ def monthStats(con, month, year):
 
     return m
 
-def printMonthStats(con, month, year):
+def printMonthStats(con, month, year, with_ytd=False):
     m = monthStats(con, month, year)
 
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
@@ -502,6 +502,11 @@ def printMonthStats(con, month, year):
     print("Delta hours:           {:>13}".format(m.deltaString()))
 
     #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
+
+    if with_ytd:
+        print()
+        print()
+        yearlyStats(con, year, month)
 
 def yearlyStats(con, year, toMonth=12, fromMonth=1):
     if (toMonth < fromMonth):
@@ -693,6 +698,8 @@ def main():
                             help='Month (1-12), defaults to current')
     parser_month.add_argument('year', nargs='?', default=date.today().year, type=int,
                             help='Year (YYYY), defaults to current')
+    parser_month.add_argument('--with-ytd', dest='with_ytd', action='store_true',
+                            help='With year-to-date summary')
 
     parser_year = commands.add_parser('year',
                                     help='Print yearly statistics')
@@ -735,7 +742,7 @@ def main():
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
-        'month':     (printMonthStats, ['month', 'year']),
+        'month':     (printMonthStats, ['month', 'year', 'with_ytd']),
         'year':     (yearlyStats, ['year', 'toMonth', 'fromMonth']),
         'vacation': (addVacation, ['start', 'end']),
         'fza': (addFza, ['start', 'end']),
