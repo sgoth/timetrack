@@ -379,10 +379,9 @@ def dayStatistics(con, offset=0):
         int(totalTime.total_seconds() // (60 * 60)),
         int((totalTime.total_seconds() % 3600) // 60)))
 
-def monthStats(con, month=0):
-    today = date.today()
-    # FIXME this needs to support other years too - make month input a date
-    m = WorkMonth(date(today.year, today.month if month == 0 else month, 1))
+def monthStats(con, month, year):
+    today = date(year, month, 1)
+    m = WorkMonth(today)
 
     if (date(m.date.year, m.date.month, 1) < date(THE_START.year,
         THE_START.month, 1)):
@@ -425,8 +424,8 @@ def monthStats(con, month=0):
 
     return m
 
-def printMonthStats(con, month=0):
-    m = monthStats(con, month)
+def printMonthStats(con, month, year):
+    m = monthStats(con, month, year)
 
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
     workdayit = iter(m.workdays)
@@ -468,18 +467,18 @@ def printMonthStats(con, month=0):
 
     #print("Delta mins {}".format(int(m.delta().total_seconds() / 60)))
 
-def yearlyStats(con, year=0, today=False):
-    y = date.today()
-    if year != 0:
-        y = y.replace(year=year)
+def yearlyStats(con, year, toMonth=12, fromMonth=1):
+    if (toMonth < fromMonth):
+        toMonth = fromMonth
 
-    firstMonth = THE_START.month if (y.year <= THE_START.year) else 1
+    y = date(year, toMonth, 1)
+    firstMonth = THE_START.month if (y.year <= THE_START.year) else fromMonth
     months = []
 
-    print("Work time summary for {} {:02d}-{:02d}\n".format(y.year, firstMonth, y.month - 1 if not today
-        else y.month))
-    for month in range(firstMonth, y.month + 1 if today else y.month):
-        m = monthStats(con, month)
+    print("Work time summary for {} {:02d}-{:02d}\n".format(y.year, firstMonth,
+        y.month))
+    for month in range(firstMonth, y.month + 1):
+        m = monthStats(con, month, y.year)
         months.append(m)
         print("{}".format(m))
 
@@ -654,12 +653,19 @@ def main():
                                 'Note only negative values make sense here.')
     parser_month = commands.add_parser('month',
                                     help='Print monthly statistics')
-    parser_month.add_argument('month', nargs='?', default=0, type=int,
-                            help='Month (1-12) or 0 for current')
+    parser_month.add_argument('month', nargs='?', default=date.today().month, type=int,
+                            help='Month (1-12), defaults to current')
+    parser_month.add_argument('year', nargs='?', default=date.today().year, type=int,
+                            help='Year (YYYY), defaults to current')
+
     parser_year = commands.add_parser('year',
                                     help='Print yearly statistics')
-    parser_year.add_argument('year', nargs='?', default=0, type=int,
-                            help='Year (YYYY) or 0 for current')
+    parser_year.add_argument('year', nargs='?', default=date.today().year, type=int,
+                            help='Year (YYYY), defaults to current')
+    parser_year.add_argument('toMonth', nargs='?', default=date.today().month-1, type=int,
+                            help='Month range end, defaults to '.format(date.today().month-1))
+    parser_year.add_argument('fromMonth', nargs='?', default=1, type=int,
+                            help='Month range start, defaults to 1')
 
     args = parser.parse_args()
 
@@ -672,8 +678,8 @@ def main():
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
-        'month':     (printMonthStats, ['month']),
-        'year':     (yearlyStats, ['year']),
+        'month':     (printMonthStats, ['month', 'year']),
+        'year':     (yearlyStats, ['year', 'toMonth', 'fromMonth']),
         'closing':  (endTracking, []),
         'stop':  (endTracking, []),
         'end':  (endTracking, [])
