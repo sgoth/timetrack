@@ -25,6 +25,14 @@ cfg = configparser.ConfigParser()
 
 THE_START = date(2021, 7, 12)
 
+
+def valid_cli_date(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        msg = "not a valid date: {0!r}".format(s)
+        raise argparse.ArgumentTypeError(msg)
+
 class ProgramAbortError(Exception):
     """
     Exception class that wraps a critical error and encapsules it for
@@ -180,6 +188,34 @@ def endTracking(con):
     leaveTime = datetime.now()
     addEntry(con, ACT_LEAVE, leaveTime)
     message(randomMessage(MSG_SUCCESS_LEAVE, leaveTime))
+
+def addSpecialEnties(con, type, start, end):
+    delta = (end - start).days
+
+    days = []
+    for i in range(0, delta + 1):
+        day = start + timedelta(days=i)
+        if holiday_calendar.is_working_day(day):
+            days.append(day)
+            print("- {} on {}".format(type, day))
+        else:
+            print("-- skipping {}".format(day))
+
+    should = input("Do you really want to add those {} days? [y/N] "
+            .format(len(days)))
+    if should == 'y':
+        for d in days:
+            print("adding {}".format(d))
+            addEntry(con, type, d)
+
+def addVacation(con, start, end):
+    addSpecialEnties(con, ACT_VACATION, start, end)
+
+def addFza(con, start, end):
+    addSpecialEnties(con, ACT_FZA, start, end)
+
+def addSick(con, start, end):
+    addSpecialEnties(con, ACT_SICK, start, end)
 
 def getEntries(con, d):
     # Get the arrival for the date
@@ -667,6 +703,27 @@ def main():
     parser_year.add_argument('fromMonth', nargs='?', default=1, type=int,
                             help='Month range start, defaults to 1')
 
+    parser_vacation = commands.add_parser('vacation',
+                                    help='Enter vacation dates')
+    parser_vacation.add_argument('start', nargs='?', type=valid_cli_date,
+                            help='Start of vacation')
+    parser_vacation.add_argument('end', nargs='?', type=valid_cli_date,
+                            help='End of vacation')
+
+    parser_fza = commands.add_parser('fza',
+                                    help='Enter fza dates')
+    parser_fza.add_argument('start', nargs='?', type=valid_cli_date,
+                            help='Start of fza')
+    parser_fza.add_argument('end', nargs='?', type=valid_cli_date,
+                            help='End of fza')
+
+    parser_sick = commands.add_parser('sick',
+                                    help='Enter sick dates')
+    parser_sick.add_argument('start', nargs='?', type=valid_cli_date,
+                            help='Start of sick')
+    parser_sick.add_argument('end', nargs='?', type=valid_cli_date,
+                            help='End of sick')
+
     args = parser.parse_args()
 
     actions = {
@@ -680,6 +737,9 @@ def main():
         'week':     (weekStatistics, ['offset']),
         'month':     (printMonthStats, ['month', 'year']),
         'year':     (yearlyStats, ['year', 'toMonth', 'fromMonth']),
+        'vacation': (addVacation, ['start', 'end']),
+        'fza': (addFza, ['start', 'end']),
+        'sick': (addSick, ['start', 'end']),
         'closing':  (endTracking, []),
         'stop':  (endTracking, []),
         'end':  (endTracking, [])
