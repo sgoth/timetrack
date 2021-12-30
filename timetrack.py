@@ -288,7 +288,9 @@ class WorkDay:
         for p in self.pauses:
             pausetime += p.duration()
 
-        return self.end - self.start - pausetime
+        total = (self.end - self.start - pausetime)
+        floored = total - (total % timedelta(minutes=1))
+        return floored
 
     def __str__(self):
         h, m = timeAsHourMinute(self.worktime())
@@ -627,7 +629,7 @@ def weekStatistics(con, offset=0):
 
 def time_mod(time, delta, epoch=None):
     if epoch is None:
-        epoch = datetime.datetime(1970, 1, 1, tzinfo=time.tzinfo)
+        epoch = datetime(1970, 1, 1, tzinfo=time.tzinfo)
     return (time - epoch) % delta
 
 def time_round(time, delta, epoch=None):
