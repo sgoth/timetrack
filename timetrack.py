@@ -229,9 +229,9 @@ def getEntries(con, d):
     res = cur.fetchone()
     if not res:
         # without arrival we expect vacation/sick
-        cur = con.execute("SELECT type, ts FROM times WHERE (type = ? OR type = "
-                        "?) AND ts >= ? AND ts < ? ORDER BY ts ASC LIMIT 1",
-                      (ACT_SICK, ACT_VACATION, datetime.combine(d, time()),
+        cur = con.execute("SELECT type, ts FROM times WHERE type IN (?,?,?) "
+                        "AND ts >= ? AND ts < ? ORDER BY ts ASC LIMIT 1",
+                      (ACT_SICK, ACT_VACATION, ACT_FZA, datetime.combine(d, time()),
                        datetime.combine(d + timedelta(days=1), time())))
         res = cur.fetchone()
         if not res:
@@ -262,6 +262,7 @@ class WorkDay:
         Normal = auto()
         Sick = auto()
         Vacation = auto()
+        FZA = auto()
 
     class Pause:
         def __init__(self):
@@ -292,6 +293,11 @@ class WorkDay:
             pausetime += p.duration()
 
         total = (self.end - self.start - pausetime)
+
+        # compensate overtime
+        if self.type == WorkDay.Type.FZA:
+            total *= -1
+
         floored = total - (total % timedelta(minutes=1))
         return floored
 
@@ -359,11 +365,13 @@ def getWorkTimeForDay(con, d=date.today()):
     day = WorkDay(d)
     pause = None
     for type, ts in getEntries(con, d):
-        if type in [ACT_SICK, ACT_VACATION]:
+        if type in [ACT_SICK, ACT_VACATION, ACT_FZA]:
             if type == ACT_SICK:
                 day.type = WorkDay.Type.Sick
             elif type == ACT_VACATION:
                 day.type = WorkDay.Type.Vacation
+            elif type == ACT_FZA:
+                day.type = WorkDay.Type.FZA
 
             # random start point
             day.start = datetime.combine(ts.date(), time(hour=8, minute=0, second=0))
@@ -504,6 +512,9 @@ def printMonthStats(con, month, year, with_ytd=False, as_hours=False):
                 comment = "(Krank)"
             elif workday.type == WorkDay.Type.Vacation:
                 comment = "(Urlaub)"
+            elif workday.type == WorkDay.Type.FZA:
+                comment = "(FZA)"
+
             print("{} {}".format(workday.to_string(as_hours=as_hours), comment))
 
             try:
