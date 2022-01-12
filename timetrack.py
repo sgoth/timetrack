@@ -11,9 +11,10 @@ import sys
 import configparser
 from enum import Enum, auto
 from functools import reduce
-
 from workalendar.europe.germany import Berlin
 import calendar
+import decimal
+from decimal import Decimal
 
 holiday_calendar = Berlin()
 
@@ -25,6 +26,8 @@ cfg = configparser.ConfigParser()
 
 THE_START = date(2021, 7, 12)
 
+# monthly reporting as decimal hours we round as expected
+decimal.getcontext().rounding = decimal.ROUND_HALF_UP
 
 def valid_cli_date(s):
     try:
@@ -292,6 +295,24 @@ class WorkDay:
         floored = total - (total % timedelta(minutes=1))
         return floored
 
+    def to_string(self, as_hours=False):
+        h, m = timeAsHourMinute(self.worktime())
+        pauseString = ""
+        for i in range(len(self.pauses)):
+            p = self.pauses[i]
+            pauseString += "{}-{}".format(p.start.strftime('%H:%M'),
+                    p.end.strftime('%H:%M'))
+            if i != len(self.pauses) - 1:
+                pauseString += ","
+        # hours as hours:minutes
+        if not as_hours:
+            return "{}   {:2d}:{:02d}   {}".format(self.day().strftime('%a %Y-%m-%d'),
+                h, m, pauseString)
+        else:
+            return "{}   {:5}   {}".format(self.day().strftime('%a %Y-%m-%d'),
+                    round(Decimal(self.worktime().total_seconds()) / 3600, 1) , pauseString)
+
+
     def __str__(self):
         h, m = timeAsHourMinute(self.worktime())
         pauseString = ""
@@ -462,7 +483,7 @@ def monthStats(con, month, year):
 
     return m
 
-def printMonthStats(con, month, year, with_ytd=False):
+def printMonthStats(con, month, year, with_ytd=False, as_hours=False):
     m = monthStats(con, month, year)
 
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
@@ -483,7 +504,8 @@ def printMonthStats(con, month, year, with_ytd=False):
                 comment = "(Krank)"
             elif workday.type == WorkDay.Type.Vacation:
                 comment = "(Urlaub)"
-            print("{} {}".format(workday, comment))
+            print("{} {}".format(workday.to_string(as_hours=as_hours), comment))
+
             try:
                 workday = next(workdayit)
             except StopIteration:
@@ -702,6 +724,8 @@ def main():
                             help='Year (YYYY), defaults to current')
     parser_month.add_argument('--with-ytd', dest='with_ytd', action='store_true',
                             help='With year-to-date summary')
+    parser_month.add_argument('--as-fract-hours', dest='as_hours', action='store_true',
+                            help='Report work time as fractional hours instead of hours:minutes')
 
     parser_year = commands.add_parser('year',
                                     help='Print yearly statistics')
@@ -744,7 +768,7 @@ def main():
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
-        'month':     (printMonthStats, ['month', 'year', 'with_ytd']),
+        'month':     (printMonthStats, ['month', 'year', 'with_ytd', 'as_hours']),
         'year':     (yearlyStats, ['year', 'toMonth', 'fromMonth']),
         'vacation': (addVacation, ['start', 'end']),
         'fza': (addFza, ['start', 'end']),
