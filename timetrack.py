@@ -112,8 +112,12 @@ def addEntry(con, type, ts):
     con.commit()
 
 
-def getLastType(con):
-    cur = con.execute("SELECT type FROM times ORDER BY ts DESC LIMIT 1")
+def getLastType(con, date=None):
+    if date:
+        cur = con.execute("SELECT type FROM times WHERE date(ts) = date('{}')"
+        "ORDER BY ts DESC LIMIT 1".format(date))
+    else:
+        cur = con.execute("SELECT type FROM times ORDER BY ts DESC LIMIT 1")
     row = cur.fetchone()
     if row is None:
         return None
@@ -127,18 +131,33 @@ def getLastTime(con):
         return None
     return row['ts']
 
+def revertLeave(con, date):
+    con.execute("UPDATE times SET type = '{}' WHERE date(ts) = date('{}')"
+    "AND type = '{}'".format(ACT_BREAK, date, ACT_LEAVE))
 
 def startTracking(con):
     """
     Start your day: Records your arrival time in the morning.
     """
+    isResume = False
+
     # Make sure you're not already at work.
-    lastType = getLastType(con)
+    lastType = getLastType(con, date.today())
     if lastType is not None and lastType != ACT_LEAVE:
         error(randomMessage(MSG_ERR_HAVE_NOT_LEFT), None)
 
+    if lastType == ACT_LEAVE:
+        should = input("You already left for today - do you really want to"
+                "return? [y/N] ")
+        if should == 'y':
+            # resumed work on same day after leave
+            revertLeave(con, date.today())
+            isResume = True
+        else:
+            raise ProgramAbortError('Aborted by user')
+
     arrivalTime = datetime.now()
-    addEntry(con, ACT_ARRIVE, arrivalTime)
+    addEntry(con, ACT_RESUME if isResume else ACT_ARRIVE, arrivalTime)
     message(randomMessage(MSG_SUCCESS_ARRIVAL, arrivalTime))
 
 
