@@ -361,7 +361,7 @@ class WorkMonth:
 
     def __str__(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{} ({} days): {:>6}{:3d} h {:02d} min".format(
+        return "{} ({:2d} days): {:>6}{:3d} h {:02d} min".format(
                 self.date.strftime("%Y-%m"),
                 len(self.workdays),
                 "+" if self.delta().total_seconds() > 0 else "-",
@@ -377,6 +377,39 @@ class WorkMonth:
 
     def addDay(self, day):
         self.workdays.append(day)
+
+class WorkYear:
+    def __init__(self, year):
+        self.months = []
+        self.year = year
+
+    def year(self):
+        return self.year
+
+    def addMonth(self, month):
+        self.months.append(month)
+
+    def totalExpected(self):
+        return reduce(lambda x,y: x + y.expectedTime, self.months, timedelta(seconds=0))
+
+    def totalActual(self):
+        return reduce(lambda x,y: x + y.actualTime, self.months, timedelta(seconds=0))
+
+    def firstMonth(self):
+        return self.months[0].date.month
+
+    def lastMonth(self):
+        return self.months[-1].date.month
+
+    def delta(self):
+        return self.totalActual() - self.totalExpected()
+
+    def __str__(self):
+        dH, dM = timeAsHourMinute(self.delta())
+        return "{} ({:3d} days): {:>6}{:3d} h {:02d} min".format(self.year,
+                reduce(lambda x,y: x + len(y.workdays), self.months, 0),
+                "+" if self.delta().total_seconds() > 0 else "-",
+                abs(dH), dM)
 
 def getWorkTimeForDay(con, d=date.today()):
     summaryTime = timedelta(0)
@@ -510,7 +543,7 @@ def monthStats(con, month, year):
 
     return m
 
-def printMonthStats(con, month, year, with_ytd=False, as_hours=False):
+def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours=False):
     m = monthStats(con, month, year)
 
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
@@ -560,7 +593,12 @@ def printMonthStats(con, month, year, with_ytd=False, as_hours=False):
     if with_ytd:
         print()
         print()
-        yearlyStats(con, year, month)
+        printYearlyStats(con, year, month)
+
+    if with_total:
+        print()
+        print()
+        printTotalStats(con, year)
 
 def yearlyStats(con, year, toMonth=12, fromMonth=1):
     if (toMonth < fromMonth):
@@ -568,20 +606,26 @@ def yearlyStats(con, year, toMonth=12, fromMonth=1):
 
     y = date(year, toMonth, 1)
     firstMonth = THE_START.month if (y.year <= THE_START.year) else fromMonth
-    months = []
 
-    print("Work time summary for {} {:02d}-{:02d}\n".format(y.year, firstMonth,
-        y.month))
+    workYear = WorkYear(year)
+
     for month in range(firstMonth, y.month + 1):
         m = monthStats(con, month, y.year)
-        months.append(m)
+        workYear.addMonth(m)
+
+    return workYear
+
+def printYearlyStats(con, year, toMonth=12, fromMonth=1):
+    wy = yearlyStats(con, year, toMonth, fromMonth)
+
+    print("Work time summary for {} {:02d}-{:02d}\n".format(wy.year,
+        wy.firstMonth(), wy.lastMonth()))
+
+    for m in wy.months:
         print("{}".format(m))
 
-    totalExpected = reduce(lambda x,y: x + y.expectedTime, months,
-            timedelta(seconds=0))
-    totalActual = reduce(lambda x,y: x + y.actualTime, months,
-            timedelta(seconds=0))
-
+    totalExpected = wy.totalExpected()
+    totalActual = wy.totalActual()
     totalDiff = totalActual - totalExpected
 
     tEH, tEM = timeAsHourMinute(totalExpected)
@@ -589,6 +633,32 @@ def yearlyStats(con, year, toMonth=12, fromMonth=1):
     print("-" * 40)
     print("total expected:{:>13d} h {:02d} min".format(tEH, tEM))
     print("total actual:  {:>13d} h {:02d} min".format(tAH, tAM))
+
+    tdH, tdM = timeAsHourMinute(totalDiff)
+    tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
+    print("total diff:    {:>10}{:>3d} h {:02d} min (workdays: {})".format(
+        ("+" if totalDiff.total_seconds() > 0 else ""),  tdH, tdM, tdD))
+
+def printTotalStats(con, year, toMonth=12):
+    years = []
+    totalExpected = timedelta(seconds=0)
+    totalActual = timedelta(seconds=0)
+
+    print("Totals:\n")
+
+    for y in range(THE_START.year, year + 1):
+        month = 12 if y < date.today().year else date.today().month - 1
+        ys = yearlyStats(con, y, month)
+        totalExpected += ys.totalExpected()
+        totalActual += ys.totalActual()
+        print("{}".format(ys))
+
+
+    totalDiff = totalActual - totalExpected
+
+    tEH, tEM = timeAsHourMinute(totalExpected)
+    tAH, tAM = timeAsHourMinute(totalActual)
+    print("-" * 40)
 
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
@@ -752,6 +822,8 @@ def main():
                             help='Month (1-12), defaults to current')
     parser_month.add_argument('year', nargs='?', default=date.today().year, type=int,
                             help='Year (YYYY), defaults to current')
+    parser_month.add_argument('--with-total', dest='with_total', action='store_true',
+                            help='With total-to-date summary')
     parser_month.add_argument('--with-ytd', dest='with_ytd', action='store_true',
                             help='With year-to-date summary')
     parser_month.add_argument('--as-fract-hours', dest='as_hours', action='store_true',
@@ -765,6 +837,13 @@ def main():
                             help='Month range end, defaults to '.format(date.today().month-1))
     parser_year.add_argument('fromMonth', nargs='?', default=1, type=int,
                             help='Month range start, defaults to 1')
+
+    parser_total = commands.add_parser('total',
+                                    help='Print totally statistics')
+    parser_total.add_argument('year', nargs='?', default=date.today().year, type=int,
+                            help='Year (YYYY), defaults to current')
+    parser_total.add_argument('toMonth', nargs='?', default=date.today().month-1, type=int,
+                            help='Month range end, defaults to '.format(date.today().month-1))
 
     parser_vacation = commands.add_parser('vacation',
                                     help='Enter vacation dates')
@@ -798,8 +877,9 @@ def main():
         'continue': (resumeTracking, []),
         'day':      (dayStatistics, ['offset']),
         'week':     (weekStatistics, ['offset']),
-        'month':     (printMonthStats, ['month', 'year', 'with_ytd', 'as_hours']),
-        'year':     (yearlyStats, ['year', 'toMonth', 'fromMonth']),
+        'month':     (printMonthStats, ['month', 'year', 'with_total', 'with_ytd', 'as_hours']),
+        'year':     (printYearlyStats, ['year', 'toMonth', 'fromMonth']),
+        'total':     (printTotalStats, ['year', 'toMonth']),
         'vacation': (addVacation, ['start', 'end']),
         'fza': (addFza, ['start', 'end']),
         'sick': (addSick, ['start', 'end']),
