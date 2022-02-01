@@ -550,7 +550,7 @@ def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours
     workdayit = iter(m.workdays)
     workday = next(workdayit)
 
-    print("Work time for {}\n".format(m.date.strftime("%B %y")))
+    print("Work time for {}:\n".format(m.date.strftime("%B '%y")))
     print("     Day         Hours   Pauses / Comment")
 
     # loop all days to also show weekends/holidays
@@ -618,7 +618,7 @@ def yearlyStats(con, year, toMonth=12, fromMonth=1):
 def printYearlyStats(con, year, toMonth=12, fromMonth=1):
     wy = yearlyStats(con, year, toMonth, fromMonth)
 
-    print("Work time summary for {} {:02d}-{:02d}\n".format(wy.year,
+    print("Yearly summary for {} {:02d}-{:02d}:\n".format(wy.year,
         wy.firstMonth(), wy.lastMonth()))
 
     for m in wy.months:
