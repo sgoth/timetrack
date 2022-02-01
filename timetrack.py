@@ -406,7 +406,7 @@ class WorkYear:
 
     def __str__(self):
         dH, dM = timeAsHourMinute(self.delta())
-        return "{} ({:3d} days): {:>6}{:3d} h {:02d} min".format(self.year,
+        return "{} ({:3d} days): {:>8}{:3d} h {:02d} min".format(self.year,
                 reduce(lambda x,y: x + len(y.workdays), self.months, 0),
                 "+" if self.delta().total_seconds() > 0 else "-",
                 abs(dH), dM)
