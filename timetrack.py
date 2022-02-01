@@ -315,7 +315,7 @@ class WorkDay:
 
         # compensate overtime
         if self.type == WorkDay.Type.FZA:
-            total *= -1
+            total *= 0
 
         floored = total - (total % timedelta(minutes=1))
         return floored
