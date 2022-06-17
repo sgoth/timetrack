@@ -1,9 +1,10 @@
 from defines import *
-
+from datetime import datetime
 import random
 
 def randomMessage(type, *args):
     messageList = []
+    timestamp = "{}: ".format(datetime.now().strftime("%H:%M"))
 
     ###########
     # Arrival #
@@ -224,5 +225,5 @@ def randomMessage(type, *args):
                 msg += " It seems you're taking a break."
         messageList.append(msg)
 
-    return random.choice(messageList)
+    return timestamp + random.choice(messageList)
 
