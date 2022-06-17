@@ -306,6 +306,9 @@ class WorkDay:
     def day(self):
         return date(self.start.year, self.start.month, self.start.day)
 
+    def is_unfinished_today(self):
+        return self.end.time() == time() and self.start.date() == date.today()
+
     def worktime(self):
         if not self.start or not self.end:
             return timedelta(seconds=0)
@@ -314,7 +317,8 @@ class WorkDay:
         for p in self.pauses:
             pausetime += p.duration()
 
-        total = (self.end - self.start - pausetime)
+        endtime = datetime.now() if self.is_unfinished_today() else self.end
+        total = (endtime - self.start - pausetime)
 
         # compensate overtime
         if self.type == WorkDay.Type.FZA:
