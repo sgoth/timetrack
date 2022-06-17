@@ -177,6 +177,7 @@ def suspendTracking(con):
     breakTime = datetime.now()
     addEntry(con, ACT_BREAK, breakTime)
     message(randomMessage(MSG_SUCCESS_BREAK, breakTime, lastTime))
+    dayStatistics(con)
 
 
 def resumeTracking(con):
@@ -195,6 +196,7 @@ def resumeTracking(con):
     resumeTime = datetime.now()
     addEntry(con, ACT_RESUME, resumeTime)
     message(randomMessage(MSG_SUCCESS_RESUME, resumeTime, lastTime))
+    dayStatistics(con)
 
 
 def endTracking(con):
@@ -210,6 +212,7 @@ def endTracking(con):
     leaveTime = datetime.now()
     addEntry(con, ACT_LEAVE, leaveTime)
     message(randomMessage(MSG_SUCCESS_LEAVE, leaveTime))
+    dayStatistics(con)
 
 def addSpecialEnties(con, type, start, end):
     delta = (end - start).days
