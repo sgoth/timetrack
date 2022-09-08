@@ -605,7 +605,7 @@ def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours
     if with_total:
         print()
         print()
-        printTotalStats(con, year)
+        printTotalStats(con, year, month)
 
 def yearlyStats(con, year, toMonth=12, fromMonth=1):
     if (toMonth < fromMonth):
@@ -654,7 +654,7 @@ def printTotalStats(con, year, toMonth=12):
     print("Totals:\n")
 
     for y in range(THE_START.year, year + 1):
-        month = 12 if y < date.today().year else date.today().month - 1
+        month = 12 if y < date.today().year else toMonth
         ys = yearlyStats(con, y, month)
         totalExpected += ys.totalExpected()
         totalActual += ys.totalActual()
