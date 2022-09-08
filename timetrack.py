@@ -273,10 +273,8 @@ def getEntries(con, d):
     return cur
 
 def timeAsHourMinute(time):
-    return  (
-                int(time.total_seconds() // (60 * 60)),
-                int((time.total_seconds() % 3600) // 60)
-            )
+    seconds = time.total_seconds() if time.total_seconds() > 0 else -time.total_seconds()
+    return  ( int(seconds // (60 * 60)), int((seconds % 3600) // 60) )
 
 
 class WorkDay:
@@ -380,7 +378,7 @@ class WorkMonth:
     def deltaString(self):
         dH, dM = timeAsHourMinute(self.delta())
         return "{} {:>2d} h {:02d} min".format("+" if self.delta().total_seconds() > 0
-                else "", dH, dM)
+                else "-", dH, dM)
 
     def addDay(self, day):
         self.workdays.append(day)
@@ -644,7 +642,7 @@ def printYearlyStats(con, year, toMonth=12, fromMonth=1):
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
     print("total diff:    {:>10}{:>3d} h {:02d} min (workdays: {})".format(
-        ("+" if totalDiff.total_seconds() > 0 else ""),  tdH, tdM, tdD))
+        ("+" if totalDiff.total_seconds() > 0 else "-"),  tdH, tdM, tdD))
 
 def printTotalStats(con, year, toMonth=12):
     years = []
@@ -670,7 +668,7 @@ def printTotalStats(con, year, toMonth=12):
     tdH, tdM = timeAsHourMinute(totalDiff)
     tdD = round(totalDiff.total_seconds() / (60 * 60 * DAY_HOURS), ndigits=2)
     print("total diff:    {:>10}{:>3d} h {:02d} min (workdays: {})".format(
-        ("+" if totalDiff.total_seconds() > 0 else ""),  tdH, tdM, tdD))
+        ("+" if totalDiff.total_seconds() > 0 else "-"),  tdH, tdM, tdD))
 
 
 def weekStatistics(con, offset=0):
