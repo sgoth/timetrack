@@ -300,12 +300,16 @@ class WorkDay:
         self.end = self.start
         self.pauses = []
         self.type = WorkDay.Type.Normal
+        self.finished = False
 
     def day(self):
         return date(self.start.year, self.start.month, self.start.day)
 
     def is_unfinished_today(self):
-        return self.end.time() == time() and self.start.date() == date.today()
+        return not self.finished and self.start.date() == date.today()
+
+    def is_finished(self):
+        return self.finished
 
     def worktime(self):
         if not self.start or not self.end:
@@ -320,6 +324,11 @@ class WorkDay:
 
         # compensate overtime
         if self.type == WorkDay.Type.FZA:
+            total *= 0
+
+        # don't count incomplete times if it's not today - calculations would be
+        # wrong
+        if not self.finished and not self.is_unfinished_today():
             total *= 0
 
         floored = total - (total % timedelta(minutes=1))
@@ -439,6 +448,7 @@ def getWorkTimeForDay(con, d=date.today()):
             day.start = ts
         elif type == ACT_LEAVE:
             day.end = ts
+            day.finished = True;
         elif type == ACT_BREAK:
             if pause:
                 error("Break while pause active at {}".format(ts), None)
@@ -565,7 +575,11 @@ def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours
             print("-" * 40)
         if workday is not None and today == workday.day():
             comment = ""
-            if workday.type == WorkDay.Type.Sick:
+            if workday.is_unfinished_today():
+                comment = "TODAY"
+            elif not workday.is_finished():
+                comment = "/!\\ UNFINISHED /!\\"
+            elif workday.type == WorkDay.Type.Sick:
                 comment = "(Krank)"
             elif workday.type == WorkDay.Type.Vacation:
                 comment = "(Urlaub)"
