@@ -309,7 +309,7 @@ class WorkDay:
         return not self.finished and self.start.date() == date.today()
 
     def is_finished(self):
-        return self.finished
+        return (self.type != self.type.Normal) or self.finished
 
     def worktime(self):
         if not self.start or not self.end:
@@ -328,7 +328,7 @@ class WorkDay:
 
         # don't count incomplete times if it's not today - calculations would be
         # wrong
-        if not self.finished and not self.is_unfinished_today():
+        if not self.is_finished() and not self.is_unfinished_today():
             total *= 0
 
         floored = total - (total % timedelta(minutes=1))
