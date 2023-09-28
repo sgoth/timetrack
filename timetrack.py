@@ -214,7 +214,7 @@ def endTracking(con):
     message(randomMessage(MSG_SUCCESS_LEAVE, leaveTime))
     dayStatistics(con)
 
-def addSpecialEnties(con, type, start, end):
+def addSpecialEntries(con, type, start, end):
     delta = (end - start).days
 
     days = []
@@ -234,13 +234,13 @@ def addSpecialEnties(con, type, start, end):
             addEntry(con, type, d)
 
 def addVacation(con, start, end):
-    addSpecialEnties(con, ACT_VACATION, start, end)
+    addSpecialEntries(con, ACT_VACATION, start, end)
 
 def addFza(con, start, end):
-    addSpecialEnties(con, ACT_FZA, start, end)
+    addSpecialEntries(con, ACT_FZA, start, end)
 
 def addSick(con, start, end):
-    addSpecialEnties(con, ACT_SICK, start, end)
+    addSpecialEntries(con, ACT_SICK, start, end)
 
 def getEntries(con, d):
     # Get the arrival for the date
