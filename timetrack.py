@@ -521,20 +521,11 @@ def monthStats(con, month, year):
         THE_START.month, 1)):
         error("Month {} before {}".format(m.date, THE_START), None)
 
-    firstDay = holiday_calendar.find_following_working_day(date(m.date.year, m.date.month, 1))
+    firstDay = date(m.date.year, m.date.month, 1)
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
 
     if (firstDay < THE_START):
         firstDay = THE_START
-    # we actually want to see all days
-    #if lastDay > today:
-    #    lastDay = lastDay.replace(day=today.day)
-
-    while not holiday_calendar.is_working_day(firstDay):
-        firstDay += timedelta(days=1)
-
-    while not holiday_calendar.is_working_day(lastDay):
-        lastDay -= timedelta(days=1)
 
     workingDays = holiday_calendar.get_working_days_delta(firstDay, lastDay,
             include_start=True)
@@ -547,10 +538,11 @@ def monthStats(con, month, year):
 
     curDay = firstDay
     while curDay <= lastDay:
-        if holiday_calendar.is_working_day(curDay):
-            workday = getWorkTimeForDay(con, curDay)
-            workedHours += workday.worktime()
-            m.addDay(workday)
+        # add an entry for every day - even non-workdays so we can print time
+        # worked there too - they are not contained in expected(Time|Workdays)
+        workday = getWorkTimeForDay(con, curDay)
+        workedHours += workday.worktime()
+        m.addDay(workday)
 
         curDay += timedelta(days=1)
 
@@ -562,22 +554,23 @@ def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours
     m = monthStats(con, month, year)
 
     lastDay = date(m.date.year, m.date.month, calendar.monthrange(m.date.year, m.date.month)[1])
-    workdayit = iter(m.workdays)
-    workday = next(workdayit)
 
     print("Work time for {}:\n".format(m.date.strftime("%B '%y")))
     print("     Day         Hours   Pauses / Comment")
 
     # loop all days to also show weekends/holidays
-    for d in range(1, lastDay.day + 1):
-        today = date(m.date.year, m.date.month, d)
+    for workday in m.workdays:
+        today = workday.day()
+
+        # visually group weeks
         if today.weekday() == 0 or today.weekday() == 5:
             print("-" * 40)
+
         if workday is not None and today == workday.day():
             comment = ""
             if workday.is_unfinished_today():
                 comment = "TODAY"
-            elif not workday.is_finished():
+            elif not workday.is_finished() and holiday_calendar.is_working_day(today):
                 comment = "/!\\ UNFINISHED /!\\"
             elif workday.type == WorkDay.Type.Sick:
                 comment = "(Krank)"
@@ -586,17 +579,12 @@ def printMonthStats(con, month, year, with_total=False, with_ytd=False, as_hours
             elif workday.type == WorkDay.Type.FZA:
                 comment = "(FZA)"
 
-            print("{} {}".format(workday.to_string(as_hours=as_hours), comment))
-
-            try:
-                workday = next(workdayit)
-            except StopIteration:
-                workday = None
-        else:
-            comment = ""
             if holiday_calendar.is_holiday(today):
-                comment = holiday_calendar.get_holiday_label(today)
-            print("{}    {:<}".format(today.strftime('%a %Y-%m-%d'), comment))
+                if len(comment) > 0:
+                    comment += " "
+                comment += holiday_calendar.get_holiday_label(today)
+
+            print("{} {}".format(workday.to_string(as_hours=as_hours), comment))
 
     expectedHours, expectedMinutes = timeAsHourMinute(m.expectedTime)
     actualHours, actualMinutes = timeAsHourMinute(m.actualTime)
